@@ -1,0 +1,16 @@
+board := "arduino:samd:nano_33_iot"
+port := "/dev/ttyACM0"
+sketch := "firmware"
+
+install:
+  curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/bin sh
+  arduino-cli core install arduino:samd
+
+compile:
+  arduino-cli compile -b {{board}} {{sketch}}
+
+upload: compile
+  arduino-cli upload -b {{board}} -p {{port}} {{sketch}}
+
+monitor:
+  arduino-cli monitor -p {{port}} -c baudrate=115200
