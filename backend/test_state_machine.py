@@ -1,8 +1,10 @@
 """Interactive test: mock serial events via terminal input to drive the state machine.
 
 Usage:
-  uv run python test_state_machine.py          # state machine only (no model load)
-  uv run python test_state_machine.py --stt    # include STT node with whisper model
+  uv run python test_state_machine.py              # state machine only (no models)
+  uv run python test_state_machine.py --stt         # include STT node
+  uv run python test_state_machine.py --tts         # include TTS node
+  uv run python test_state_machine.py --stt --tts   # include both
 """
 
 import argparse
@@ -22,19 +24,21 @@ log = logging.getLogger(__name__)
 
 HELP = """
 Commands:
-  b / button [id]     - send button press (default id=1)
-  a / audio [chunks]  - send audio chunks (default 10)
-  t / transcribe TEXT  - inject transcription result
-  d / done            - send SPEECH_DONE event
-  s / state           - print current state
-  q / quit            - exit
-  h / help            - show this help
+  b / base              - send base button press
+  o / open_lid          - send open_lid button press
+  a / audio [n]         - send n audio chunks (default 10)
+  t / transcribe TEXT   - inject transcription result
+  d / done              - send SPEECH_DONE event
+  s / state             - print current state
+  q / quit              - exit
+  h / help              - show this help
 """.strip()
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stt", action="store_true", help="Load STT node with whisper model")
+    parser.add_argument("--tts", action="store_true", help="Load TTS node with piper model")
     args = parser.parse_args()
 
     bus = MessageBus()
@@ -47,6 +51,13 @@ def main():
         nodes.append(stt)
     else:
         log.info("[test] STT node skipped (use --stt to enable)")
+
+    if args.tts:
+        from nodes import TTSNode
+        tts = TTSNode(bus)
+        nodes.append(tts)
+    else:
+        log.info("[test] TTS node skipped (use --tts to enable)")
 
     for node in nodes:
         node.start()
@@ -77,9 +88,11 @@ def main():
         cmd = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        if cmd in ("b", "button"):
-            button_id = int(arg) if arg.isdigit() else 1
-            bus.publish("serial/button", button_id)
+        if cmd in ("b", "base"):
+            bus.publish("serial/button", {"id": 0x01, "name": "base"})
+
+        elif cmd in ("o", "open_lid", "open", "lid"):
+            bus.publish("serial/button", {"id": 0x02, "name": "open_lid"})
 
         elif cmd in ("a", "audio"):
             n = int(arg) if arg.isdigit() else 10
