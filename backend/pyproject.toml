@@ -14,4 +14,5 @@ dependencies = [
     "piper-tts>=1.4.1",
     "pyserial>=3.5",
     "simple-websocket>=1.1.0",
+    "sentence-transformers>=5.2.3",
 ]
