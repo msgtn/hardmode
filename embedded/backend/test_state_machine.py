@@ -5,7 +5,8 @@ Usage:
   uv run python test_state_machine.py --serial              # include serial node
   uv run python test_state_machine.py --stt                 # include STT node
   uv run python test_state_machine.py --tts                 # include TTS node
-  uv run python test_state_machine.py --serial --stt --tts  # include all
+  uv run python test_state_machine.py --api                  # include API node
+  uv run python test_state_machine.py --serial --stt --tts --api  # include all
 """
 
 import argparse
@@ -43,6 +44,7 @@ def main():
     parser.add_argument("--serial", action="store_true", help="Load serial node (reads from device)")
     parser.add_argument("--stt", action="store_true", help="Load STT node with whisper model")
     parser.add_argument("--tts", action="store_true", help="Load TTS node with piper model")
+    parser.add_argument("--api", action="store_true", help="Load API node (HTTP server)")
     args = parser.parse_args()
 
     bus = MessageBus()
@@ -69,6 +71,13 @@ def main():
         nodes.append(tts)
     else:
         log.info("[test] TTS node skipped (use --tts to enable)")
+
+    if args.api:
+        from nodes import APINode
+        api = APINode(bus)
+        nodes.append(api)
+    else:
+        log.info("[test] API node skipped (use --api to enable)")
 
     def on_partial(msg):
         print(f"\r  [partial] {msg.data}", flush=True)

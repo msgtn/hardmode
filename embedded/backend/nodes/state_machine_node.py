@@ -54,9 +54,12 @@ class StateMachineNode(Node):
         super().__init__("state_machine", bus)
         self.state = State.IDLE
 
+        self._random_question = ""
+
         self.subscribe("serial/button", self._on_button)
         self.subscribe("stt/transcription", self._on_transcription)
         self.subscribe("tts/done", self._on_tts_done)
+        self.subscribe("api/questions/random/response", self._on_random_question)
 
     def _transition(self, event: Event):
         if event == Event.BUTTON_CLOSE_LID:
@@ -67,6 +70,7 @@ class StateMachineNode(Node):
             if prev == State.LISTENING:
                 self.publish("state/listening", False)
                 self.publish("serial/led", {"led": "red", "on": False})
+            self.publish("api/questions/random", {})
             return
 
         key = (self.state, event)
@@ -96,12 +100,11 @@ class StateMachineNode(Node):
             log.info(f"[state_machine] requesting TTS (answer): {text!r}")
             self.publish("tts/speak", "SPEAKING_TEXT")
 
+        if next_state == State.IDLE:
+            self.publish("api/questions/random", {})
+
         if next_state == State.SPEAKING:
-            text = (
-                getattr(self, "_last_transcription", "")
-                if prev == State.PROCESSING
-                else OPEN_LID_PROMPT
-            )
+            text = self._random_question or OPEN_LID_PROMPT
             log.info(f"[state_machine] requesting TTS: {text!r}")
             self.publish("tts/speak", text)
 
@@ -127,6 +130,10 @@ class StateMachineNode(Node):
         else:
             log.warning(f"[state_machine] unknown button type: {name}")
 
+    def _on_random_question(self, msg: Message):
+        self._random_question = msg.data
+        log.info(f"[state_machine] stored random question: {msg.data!r}")
+
     def _on_transcription(self, msg: Message):
         text = msg.data
         log.info(f"[state_machine] transcription: {text!r}")
@@ -140,6 +147,8 @@ class StateMachineNode(Node):
 
     def _run(self):
         import time
+
+        self.publish("api/questions/random", {})
 
         while self._running:
             time.sleep(0.1)

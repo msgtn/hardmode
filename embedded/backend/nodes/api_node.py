@@ -2,6 +2,8 @@ import logging
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
+from urllib.request import urlopen, Request
+from urllib.error import URLError
 
 from nodes.base import Node, MessageBus, Message
 
@@ -23,6 +25,7 @@ class APINode(Node):
 
         self.subscribe("state/changed", self._on_state_changed)
         self.subscribe("state/transcription_text", self._on_transcription)
+        self.subscribe("api/questions/random", self._on_questions_random)
 
         node_ref = self
         class Handler(BaseHTTPRequestHandler):
@@ -75,6 +78,16 @@ class APINode(Node):
                 log.info(f"[api] {fmt % args}")
 
         self._handler_class = Handler
+
+    def _on_questions_random(self, msg: Message):
+        try:
+            resp = urlopen("http://10.31.156.57:5000/questions/random", timeout=5)
+            data = json.loads(resp.read())
+            text = data.get("text", "") if isinstance(data, dict) else str(data)
+            log.info(f"[api] random question: {text!r}")
+            self.publish("api/questions/random/response", text)
+        except (URLError, json.JSONDecodeError, OSError) as e:
+            log.error(f"[api] failed to fetch random question: {e}")
 
     def _on_state_changed(self, msg: Message):
         self._state = msg.data["to"].name

@@ -1,2 +1,2 @@
 test:
-  uv run test_state_machine.py --stt --tts --serial
+  uv run test_state_machine.py --stt --tts --serial --api
