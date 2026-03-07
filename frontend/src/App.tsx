@@ -1,50 +1,64 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import viteLogo from "/vite.svg";
 import "./App.css";
-import { io } from "socket.io-client";
 
 function App() {
-  const [count, setCount] = useState(0);
-  const socket = io();
+  const [output, setOutput] = useState<string[]>([]);
 
-  socket.on("connect", () => console.log("connected"));
-  socket.on("message", (data) => console.log("received: ", data));
+  const log = (msg: string) => setOutput((prev) => [...prev, msg]);
 
-  socket.emit("message", { hello: "world" });
-
-  const healthCheck = async () => {
+  const testHealth = async () => {
     const res = await fetch("/api/health");
-    console.log(res);
     const data = await res.json();
-    console.log(data);
+    log(`GET /health → ${JSON.stringify(data)}`);
   };
 
-  healthCheck();
+  const testAddAnswer = async () => {
+    const res = await fetch("/api/answers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: "What is the capital of France?", answer: "Paris" }),
+    });
+    const data = await res.json();
+    log(`POST /answers → ${JSON.stringify(data)}`);
+  };
+
+  const testGetQuestions = async () => {
+    const res = await fetch("/api/questions");
+    const data = await res.json();
+    log(`GET /questions → ${JSON.stringify(data)}`);
+  };
+
+  const testGetAnswers = async () => {
+    const questionsRes = await fetch("/api/questions");
+    const questions = await questionsRes.json();
+    if (questions.length === 0) {
+      log("No questions yet — add an answer first");
+      return;
+    }
+    const id = questions[0].id;
+    const res = await fetch(`/api/questions/${id}/answers`);
+    const data = await res.json();
+    log(`GET /questions/${id}/answers → ${JSON.stringify(data)}`);
+  };
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div style={{ padding: 24, fontFamily: "monospace" }}>
+      <h2>API Tests</h2>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <button onClick={testHealth}>GET /health</button>
+        <button onClick={testAddAnswer}>POST /answers</button>
+        <button onClick={testGetQuestions}>GET /questions</button>
+        <button onClick={testGetAnswers}>GET /questions/:id/answers</button>
+        <button onClick={() => setOutput([])}>Clear</button>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {output.map((line, i) => (
+          <div key={i} style={{ background: "#111", color: "#0f0", padding: "4px 8px", borderRadius: 4 }}>
+            {line}
+          </div>
+        ))}
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    </div>
   );
 }
 
