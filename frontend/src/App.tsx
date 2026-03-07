@@ -2,9 +2,16 @@ import { useState } from "react";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
+import { io } from "socket.io-client";
 
 function App() {
   const [count, setCount] = useState(0);
+  const socket = io();
+
+  socket.on("connect", () => console.log("connected"));
+  socket.on("message", (data) => console.log("received: ", data));
+
+  socket.emit("message", { hello: "world" });
 
   const healthCheck = async () => {
     const res = await fetch("/api/health");
