@@ -1,0 +1,19 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Piper TTS models
+*.onnx
+*.onnx.json
+
+# Faster Whisper models
+models/
+
+# Environment
+.env
