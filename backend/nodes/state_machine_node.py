@@ -24,15 +24,11 @@ TRANSITIONS: dict[tuple[State, Event], State] = {
     # base button: toggle listening / stop listening
     (State.IDLE, Event.BUTTON_BASE): State.LISTENING,
     (State.LISTENING, Event.BUTTON_BASE): State.PROCESSING,
-
     # open lid: go straight to speaking a prompt
     (State.IDLE, Event.BUTTON_OPEN_LID): State.SPEAKING,
-
-    # transcription finishes processing
-    (State.LISTENING, Event.TRANSCRIPTION_READY): State.PROCESSING,
-
+    # transcription finishes -> speak it back via TTS
+    (State.PROCESSING, Event.TRANSCRIPTION_READY): State.SPEAKING,
     # speech finishes
-    (State.PROCESSING, Event.SPEECH_DONE): State.IDLE,
     (State.SPEAKING, Event.SPEECH_DONE): State.IDLE,
 }
 
@@ -70,15 +66,16 @@ class StateMachineNode(Node):
             self.publish("serial/led", {"led": "red", "on": False})
 
         if next_state == State.SPEAKING:
-            log.info(f"[state_machine] requesting TTS: {OPEN_LID_PROMPT!r}")
-            self.publish("tts/speak", OPEN_LID_PROMPT)
+            text = getattr(self, "_last_transcription", "") if prev == State.PROCESSING else OPEN_LID_PROMPT
+            log.info(f"[state_machine] requesting TTS: {text!r}")
+            self.publish("tts/speak", text)
 
     # -- callbacks -----------------------------------------------------------
 
     def _on_button(self, msg: Message):
         button = msg.data
         name = button["name"]
-        log.info(f"[state_machine] button event received: {name}")
+        log.info(f"[state_machine] button event received: {name} (state={self.state.name})")
 
         if name == "open_lid":
             self._transition(Event.BUTTON_OPEN_LID)
@@ -90,6 +87,7 @@ class StateMachineNode(Node):
     def _on_transcription(self, msg: Message):
         text = msg.data
         log.info(f"[state_machine] transcription: {text!r}")
+        self._last_transcription = text
         self._transition(Event.TRANSCRIPTION_READY)
         self.publish("state/transcription_text", text)
 
@@ -99,5 +97,6 @@ class StateMachineNode(Node):
 
     def _run(self):
         import time
+
         while self._running:
             time.sleep(0.1)
