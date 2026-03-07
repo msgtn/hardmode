@@ -1,4 +1,5 @@
 #include <ESP_I2S.h>
+#include <Adafruit_NeoPixel.h>
 #include <stdint.h>
 
 // Frame types (must match backend/nodes/serial_node.py)
@@ -16,7 +17,17 @@ constexpr int SAMPLE_RATE  = 16000;
 constexpr int AUDIO_BUF_SAMPLES = 512;
 int16_t micBuf[AUDIO_BUF_SAMPLES];
 
-constexpr int LED_PIN = 21;  // XIAO ESP32S3 built-in LED
+constexpr int LED_PIN = 21;       // XIAO ESP32S3 built-in LED
+constexpr int NEOPIXEL_PIN = 44;  // Single NeoPixel on GPIO44
+
+// LED IDs (must match backend serial_node.py led_ids)
+constexpr uint8_t LED_ID_RED   = 0;
+constexpr uint8_t LED_ID_GREEN = 1;
+constexpr uint8_t LED_ID_BLUE  = 2;
+
+Adafruit_NeoPixel neopixel(1, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+uint8_t neoR = 0, neoG = 0, neoB = 0;
+uint8_t neoBrightness = 32;  // global brightness scale (0–255)
 
 // Audio output via PWM
 constexpr int AUDIO_OUT_PIN = 2;   // GPIO2 (D1/A1) — connect speaker/amplifier here
@@ -28,6 +39,14 @@ constexpr int RING_BUF_SIZE = 65536;  // ~4s at 16kHz
 volatile int16_t ringBuf[RING_BUF_SIZE];
 volatile int ringHead = 0;  // written by main loop (core 1)
 volatile int ringTail = 0;  // read by audio task (core 0)
+
+// Button config
+constexpr int BUTTON_PIN = 1;     // GPIO1 — BUTTON_BASE
+constexpr uint8_t BUTTON_BASE_ID = 0x01;  // must match backend BUTTON_BASE
+constexpr unsigned long DEBOUNCE_MS = 50;
+bool lastReading = LOW;
+bool buttonState = LOW;
+unsigned long lastDebounceTime = 0;
 
 // Mutex for Serial writes (mic task and main loop both write)
 SemaphoreHandle_t serialMutex;
@@ -132,7 +151,19 @@ void handleIncoming() {
     if (got < toRead) continue;
 
     if (frameType == FRAME_LED && got >= 2) {
-      digitalWrite(LED_PIN, payload[1] ? LOW : HIGH);
+      uint8_t ledId = payload[0];
+      bool on = payload[1];
+      // Built-in LED (active-low) always mirrors any LED command
+      digitalWrite(LED_PIN, on ? LOW : HIGH);
+      // NeoPixel: set R/G/B channel based on led_id
+      if (ledId == LED_ID_RED)        neoR = on ? 255 : 0;
+      else if (ledId == LED_ID_GREEN) neoG = on ? 255 : 0;
+      else if (ledId == LED_ID_BLUE)  neoB = on ? 255 : 0;
+      neopixel.setPixelColor(0, neopixel.Color(
+        (neoR * neoBrightness) >> 8,
+        (neoG * neoBrightness) >> 8,
+        (neoB * neoBrightness) >> 8));
+      neopixel.show();
     }
   }
 }
@@ -142,6 +173,12 @@ void setup() {
   Serial.begin(115200);
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
+
+  pinMode(BUTTON_PIN, INPUT_PULLDOWN);
+
+  neopixel.begin();
+  neopixel.clear();
+  neopixel.show();
 
   serialMutex = xSemaphoreCreateMutex();
 
@@ -167,6 +204,36 @@ void setup() {
 }
 
 // Main loop (core 1): dedicated to servicing incoming serial without blocking
+unsigned long lastNeoRefresh = 0;
+
+void checkButton() {
+  bool reading = digitalRead(BUTTON_PIN);
+  if (reading != lastReading) {
+    lastDebounceTime = millis();
+  }
+  lastReading = reading;
+
+  if ((millis() - lastDebounceTime) > DEBOUNCE_MS) {
+    if (reading != buttonState) {
+      buttonState = reading;
+      uint8_t payload[2] = { BUTTON_BASE_ID, buttonState ? (uint8_t)1 : (uint8_t)0 };
+      sendFrame(FRAME_BUTTON, payload, 2);
+    }
+  }
+}
+
 void loop() {
   handleIncoming();
+  checkButton();
+
+  // Refresh NeoPixel every 100ms to recover from glitched show() calls
+  unsigned long now = millis();
+  if (now - lastNeoRefresh >= 100) {
+    lastNeoRefresh = now;
+    neopixel.setPixelColor(0, neopixel.Color(
+        (neoR * neoBrightness) >> 8,
+        (neoG * neoBrightness) >> 8,
+        (neoB * neoBrightness) >> 8));
+    neopixel.show();
+  }
 }

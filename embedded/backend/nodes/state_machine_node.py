@@ -70,6 +70,8 @@ class StateMachineNode(Node):
             if prev == State.LISTENING:
                 self.publish("state/listening", False)
                 self.publish("serial/led", {"led": "red", "on": False})
+            if prev in (State.SPEAKING, State.SPEAKING_ACK, State.SPEAKING_ANSWER):
+                self.publish("serial/led", {"led": "green", "on": False})
             self.publish("api/questions/random", {})
             return
 
@@ -90,6 +92,12 @@ class StateMachineNode(Node):
         elif prev == State.LISTENING:
             self.publish("state/listening", False)
             self.publish("serial/led", {"led": "red", "on": False})
+
+        SPEAKING_STATES = (State.SPEAKING, State.SPEAKING_ACK, State.SPEAKING_ANSWER)
+        if next_state in SPEAKING_STATES and prev not in SPEAKING_STATES:
+            self.publish("serial/led", {"led": "green", "on": True})
+        elif prev in SPEAKING_STATES and next_state not in SPEAKING_STATES:
+            self.publish("serial/led", {"led": "green", "on": False})
 
         if next_state == State.SPEAKING_ACK:
             log.info("[state_machine] requesting TTS: 'thanks!'")
