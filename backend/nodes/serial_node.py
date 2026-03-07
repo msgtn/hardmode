@@ -51,11 +51,12 @@ class SerialNode(Node):
     # -- callbacks -----------------------------------------------------------
 
     def _on_audio_out(self, msg: Message):
-        """Send audio bytes to device, chunking if needed."""
+        """Send audio bytes to device, paced to match 16kHz playback."""
         data: bytes = msg.data
-        max_payload = 65535
+        max_payload = 1024  # 512 samples = 32ms at 16kHz
         for i in range(0, len(data), max_payload):
             self._send_frame(FRAME_AUDIO_OUT, data[i:i + max_payload])
+            time.sleep(0.025)  # slightly under 32ms to keep buffer fed
 
     def _on_led(self, msg: Message):
         """Send LED state to device. msg.data = {"led": str, "on": bool}"""
