@@ -18,18 +18,43 @@ int16_t micBuf[AUDIO_BUF_SAMPLES];
 
 constexpr int LED_PIN = 21;  // XIAO ESP32S3 built-in LED
 
-// Audio output via I2S PDM TX (hardware-timed, DMA-buffered)
-constexpr int SPK_CLK_PIN  = 3;  // GPIO3 (D2/A2) — PDM clock (not needed externally)
-constexpr int SPK_DATA_PIN = 2;  // GPIO2 (D1/A1) — PDM data, low-pass filter to speaker
+// Audio output via PWM
+constexpr int AUDIO_OUT_PIN = 2;   // GPIO2 (D1/A1) — connect speaker/amplifier here
+constexpr int PWM_FREQ      = 40000;  // 40kHz carrier, well above audible range
+constexpr int PWM_RESOLUTION = 8;     // 8-bit duty cycle (0–255)
+
+// Ring buffer for audio output playback
+constexpr int RING_BUF_SIZE = 65536;  // ~4s at 16kHz
+volatile int16_t ringBuf[RING_BUF_SIZE];
+volatile int ringHead = 0;  // written by main loop (core 1)
+volatile int ringTail = 0;  // read by audio task (core 0)
 
 // Mutex for Serial writes (mic task and main loop both write)
 SemaphoreHandle_t serialMutex;
 
-// Pause mic during audio playback to avoid concurrent Serial access
-volatile bool micPaused = false;
+I2SClass i2s;
 
-I2SClass i2sIn;   // mic input (auto-assigns I2S port)
-I2SClass i2sOut;  // speaker output (auto-assigns I2S port)
+// Audio output task: runs on core 0, outputs samples at exactly 16kHz via PWM.
+void audioOutputTask(void *param) {
+  int64_t nextSampleTimeX2 = esp_timer_get_time() * 2;
+
+  while (true) {
+    int64_t nowX2 = esp_timer_get_time() * 2;
+    if (nowX2 < nextSampleTimeX2) {
+      delayMicroseconds((nextSampleTimeX2 - nowX2) / 2);
+    }
+    nextSampleTimeX2 += 125;  // 62.5μs * 2 = 125 half-μs
+
+    if (ringHead != ringTail) {
+      int16_t sample = ringBuf[ringTail];
+      ringTail = (ringTail + 1) % RING_BUF_SIZE;
+      uint8_t duty = (uint8_t)((sample + 32768) >> 8);
+      ledcWrite(AUDIO_OUT_PIN, duty);
+    } else {
+      ledcWrite(AUDIO_OUT_PIN, 128);
+    }
+  }
+}
 
 void sendFrame(uint8_t frameType, const uint8_t *payload, uint16_t length) {
   uint8_t header[3];
@@ -42,17 +67,25 @@ void sendFrame(uint8_t frameType, const uint8_t *payload, uint16_t length) {
   xSemaphoreGive(serialMutex);
 }
 
-// Mic task: reads I2S and sends frames, pauses during audio playback
+// Mic task: runs on core 0, reads I2S and sends frames (non-blocking to main loop)
 void micTask(void *param) {
   while (true) {
-    if (micPaused) {
-      vTaskDelay(pdMS_TO_TICKS(10));
-      continue;
-    }
-    size_t bytesRead = i2sIn.readBytes((char *)micBuf, sizeof(micBuf));
+    size_t bytesRead = i2s.readBytes((char *)micBuf, sizeof(micBuf));
     if (bytesRead > 0) {
       sendFrame(FRAME_AUDIO, (const uint8_t *)micBuf, bytesRead);
     }
+  }
+}
+
+// Queue 16-bit PCM samples into the ring buffer for playback
+void queueAudioOut(const uint8_t *data, uint16_t length) {
+  uint16_t numSamples = length / 2;
+  const int16_t *samples = (const int16_t *)data;
+  for (uint16_t i = 0; i < numSamples; i++) {
+    int nextHead = (ringHead + 1) % RING_BUF_SIZE;
+    if (nextHead == ringTail) break;
+    ringBuf[ringHead] = samples[i];
+    ringHead = nextHead;
   }
 }
 
@@ -64,25 +97,19 @@ void handleIncoming() {
     uint16_t length   = (uint16_t(lenHi) << 8) | lenLo;
 
     if (frameType == FRAME_AUDIO_OUT) {
-      micPaused = true;
-      // Read payload and write directly to I2S output (DMA handles timing)
-      uint8_t chunk[512];
+      uint8_t chunk[256];
       uint16_t remaining = length;
       unsigned long start = millis();
-      while (remaining > 0 && (millis() - start) < 5000) {
+      while (remaining > 0 && (millis() - start) < 500) {
         uint16_t toRead = min(remaining, (uint16_t)sizeof(chunk));
         uint16_t got = 0;
-        while (got < toRead && (millis() - start) < 5000) {
+        while (got < toRead && (millis() - start) < 500) {
           if (Serial.available()) {
             chunk[got++] = Serial.read();
           }
         }
         if (got > 0) {
-          // Ensure even byte count for 16-bit samples
-          uint16_t even = got & ~1;
-          if (even > 0) {
-            i2sOut.write(chunk, even);
-          }
+          queueAudioOut(chunk, got);
           remaining -= got;
         }
       }
@@ -118,9 +145,9 @@ void setup() {
 
   serialMutex = xSemaphoreCreateMutex();
 
-  // Configure PDM microphone (I2S0)
-  i2sIn.setPinsPdmRx(MIC_CLK_PIN, MIC_DATA_PIN);
-  if (!i2sIn.begin(I2S_MODE_PDM_RX, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
+  // Configure PDM microphone
+  i2s.setPinsPdmRx(MIC_CLK_PIN, MIC_DATA_PIN);
+  if (!i2s.begin(I2S_MODE_PDM_RX, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
     while (true) {
       digitalWrite(LED_PIN, LOW);
       delay(100);
@@ -129,26 +156,17 @@ void setup() {
     }
   }
 
-  // Configure PDM speaker output (I2S1)
-  i2sOut.setPinsPdmTx(SPK_CLK_PIN, SPK_DATA_PIN);
-  if (!i2sOut.begin(I2S_MODE_PDM_TX, SAMPLE_RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO)) {
-    while (true) {
-      digitalWrite(LED_PIN, LOW);
-      delay(50);
-      digitalWrite(LED_PIN, HIGH);
-      delay(50);
-    }
-  }
+  // Configure PWM audio output
+  ledcAttach(AUDIO_OUT_PIN, PWM_FREQ, PWM_RESOLUTION);
+  ledcWrite(AUDIO_OUT_PIN, 128);
 
-  // Mic capture on core 1
+  // Audio playback on core 0
+  xTaskCreatePinnedToCore(audioOutputTask, "audio_out", 2048, NULL, 5, NULL, 0);
+  // Mic capture on core 1 (core 0 is busy with audio output spin loop)
   xTaskCreatePinnedToCore(micTask, "mic", 4096, NULL, 3, NULL, 1);
 }
 
-// Main loop (core 1): dedicated to servicing incoming serial
+// Main loop (core 1): dedicated to servicing incoming serial without blocking
 void loop() {
   handleIncoming();
-  // Unpause mic when I2S output buffer is drained
-  if (micPaused && i2sOut.available() == 0) {
-    micPaused = false;
-  }
 }
