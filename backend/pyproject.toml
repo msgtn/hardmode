@@ -15,4 +15,6 @@ dependencies = [
     "pyserial>=3.5",
     "simple-websocket>=1.1.0",
     "sentence-transformers>=5.2.3",
+    "detoxify>=0.5.2",
+    "better-profanity>=0.7.0",
 ]

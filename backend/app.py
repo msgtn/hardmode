@@ -2,12 +2,14 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import db
+import moderation
 import similarity
 
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 db.init_db()
+moderation.preload()
 
 
 @app.route("/health")
@@ -28,6 +30,9 @@ def get_answers(question_id):
 @app.route("/answers", methods=["POST"])
 def add_answer():
     body = request.get_json()
+    result = moderation.moderate(body["question"], body["answer"])
+    if not result.approved:
+        return jsonify({"approved": False, "reason": result.reason}), 422
     answer = db.add_answer(body["question"], body["answer"])
     return jsonify(answer), 201
 
