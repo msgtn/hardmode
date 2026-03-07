@@ -1,10 +1,11 @@
 """Interactive test: mock serial events via terminal input to drive the state machine.
 
 Usage:
-  uv run python test_state_machine.py              # state machine only (no models)
-  uv run python test_state_machine.py --stt         # include STT node
-  uv run python test_state_machine.py --tts         # include TTS node
-  uv run python test_state_machine.py --stt --tts   # include both
+  uv run python test_state_machine.py                      # state machine only (no models)
+  uv run python test_state_machine.py --serial              # include serial node
+  uv run python test_state_machine.py --stt                 # include STT node
+  uv run python test_state_machine.py --tts                 # include TTS node
+  uv run python test_state_machine.py --serial --stt --tts  # include all
 """
 
 import argparse
@@ -37,6 +38,7 @@ Commands:
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--serial", action="store_true", help="Load serial node (reads from device)")
     parser.add_argument("--stt", action="store_true", help="Load STT node with whisper model")
     parser.add_argument("--tts", action="store_true", help="Load TTS node with piper model")
     args = parser.parse_args()
@@ -44,6 +46,13 @@ def main():
     bus = MessageBus()
     state_machine = StateMachineNode(bus)
     nodes = [state_machine]
+
+    if args.serial:
+        from nodes import SerialNode
+        serial_node = SerialNode(bus)
+        nodes.append(serial_node)
+    else:
+        log.info("[test] Serial node skipped (use --serial to enable)")
 
     if args.stt:
         from nodes import STTNode

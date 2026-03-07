@@ -27,6 +27,18 @@ IDLE --[button]--> LISTENING --[button]--> PROCESSING --[speech_done]--> IDLE
 uv sync
 ```
 
+### Firmware (embedded)
+
+The `embedded/` directory has a `Justfile` for building and uploading Arduino firmware:
+
+```bash
+cd ../embedded
+just install        # install arduino-cli + SAMD core
+just compile        # compile only
+just upload         # compile + upload to /dev/ttyACM0
+just monitor        # open serial monitor (115200 baud)
+```
+
 ## Run
 
 ```bash
@@ -41,11 +53,20 @@ Requires a serial device at `/dev/ttyACM0`. Pass a different port via `SerialNod
 uv run python test_state_machine.py
 ```
 
-Interactive REPL that mocks serial events by publishing directly to the Zenoh bus. Commands:
+Interactive REPL that mocks serial events by publishing directly to the Zenoh bus. Flags:
+
+| Flag | Description |
+|------|-------------|
+| `--serial` | Connect to real serial device |
+| `--stt` | Load STT node with whisper model |
+| `--tts` | Load TTS node with piper model |
+
+Commands:
 
 | Command | Description |
 |---------|-------------|
-| `b` / `button [id]` | Send button press (default id=1) |
+| `b` / `base` | Send base button press |
+| `o` / `open_lid` | Send open_lid button press |
 | `a` / `audio [n]` | Send `n` audio chunks (default 10) |
 | `t` / `transcribe TEXT` | Inject a transcription result |
 | `d` / `done` | Send SPEECH_DONE event |

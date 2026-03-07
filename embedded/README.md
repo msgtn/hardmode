@@ -13,8 +13,8 @@ Arduino Nano 33 IoT firmware that communicates with the backend over serial usin
 ## Compile and Upload
 
 ```bash
-arduino-cli compile -b arduino:samd:nano_33_iot embedded/firmware/
-arduino-cli upload -b arduino:samd:nano_33_iot -p /dev/ttyACM0 embedded/firmware/
+arduino-cli compile -b arduino:samd:nano_33_iot firmware/
+arduino-cli upload -b arduino:samd:nano_33_iot -p /dev/ttyACM0 firmware/
 ```
 
 ## Protocol
