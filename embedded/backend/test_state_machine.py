@@ -25,8 +25,10 @@ log = logging.getLogger(__name__)
 
 HELP = """
 Commands:
-  b / base              - send base button press
+  bd / base_down        - send base button down
+  bu / base_up          - send base button up
   o / open_lid          - send open_lid button press
+  c / close_lid         - send close_lid button press
   a / audio [n]         - send n audio chunks (default 10)
   t / transcribe TEXT   - inject transcription result
   d / done              - send SPEECH_DONE event
@@ -106,11 +108,17 @@ def main():
         cmd = parts[0].lower()
         arg = parts[1] if len(parts) > 1 else ""
 
-        if cmd in ("b", "base"):
-            bus.publish("serial/button", {"id": 0x01, "name": "base"})
+        if cmd in ("bd", "base_down"):
+            bus.publish("serial/button", {"id": 0x01, "name": "base_down", "action": "down"})
+
+        elif cmd in ("bu", "base_up"):
+            bus.publish("serial/button", {"id": 0x01, "name": "base_up", "action": "up"})
 
         elif cmd in ("o", "open_lid", "open", "lid"):
             bus.publish("serial/button", {"id": 0x02, "name": "open_lid"})
+
+        elif cmd in ("c", "close_lid", "close"):
+            bus.publish("serial/button", {"id": 0x02, "name": "close_lid"})
 
         elif cmd in ("a", "audio"):
             n = int(arg) if arg.isdigit() else 10

@@ -2,7 +2,7 @@ import logging
 import signal
 import sys
 
-from nodes import MessageBus, SerialNode, StateMachineNode, STTNode, TTSNode
+from nodes import MessageBus, APINode, SerialNode, StateMachineNode, STTNode, TTSNode
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,8 +19,9 @@ def main():
     state_machine = StateMachineNode(bus)
     stt = STTNode(bus)
     tts = TTSNode(bus)
+    api = APINode(bus)
 
-    nodes = [serial_node, state_machine, stt, tts]
+    nodes = [serial_node, state_machine, stt, tts, api]
 
     for node in nodes:
         node.start()

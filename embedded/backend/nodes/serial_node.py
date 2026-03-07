@@ -22,6 +22,10 @@ FRAME_LED = 0x82
 BUTTON_BASE = 0x01
 BUTTON_OPEN_LID = 0x02
 
+# Action byte (second byte of FRAME_BUTTON payload)
+ACTION_UP = 0x00
+ACTION_DOWN = 0x01
+
 BUTTON_NAMES = {
     BUTTON_BASE: "base",
     BUTTON_OPEN_LID: "open_lid",
@@ -47,6 +51,7 @@ class SerialNode(Node):
 
         self.subscribe("serial/audio_out", self._on_audio_out)
         self.subscribe("serial/led", self._on_led)
+        self.subscribe("serial/trigger_button", self._on_trigger_button)
 
     # -- callbacks -----------------------------------------------------------
 
@@ -57,6 +62,22 @@ class SerialNode(Node):
         for i in range(0, len(data), max_payload):
             self._send_frame(FRAME_AUDIO_OUT, data[i:i + max_payload])
             time.sleep(0.025)  # slightly under 32ms to keep buffer fed
+
+    def _on_trigger_button(self, msg: Message):
+        """Emit a button event from software. msg.data = {"name": "base_down"|"base_up"|"open_lid"}"""
+        name = msg.data.get("name", "base_down")
+        log.info(f"[serial] trigger button: {name}")
+        # Parse action suffix if present
+        action_name = "down"
+        base_name = name
+        for suffix in ("_down", "_up"):
+            if name.endswith(suffix):
+                base_name = name[: -len(suffix)]
+                action_name = suffix[1:]
+                break
+        name_to_id = {v: k for k, v in BUTTON_NAMES.items()}
+        button_id = name_to_id.get(base_name, BUTTON_BASE)
+        self.publish("serial/button", {"id": button_id, "name": name, "action": action_name})
 
     def _on_led(self, msg: Message):
         """Send LED state to device. msg.data = {"led": str, "on": bool}"""
@@ -122,9 +143,12 @@ class SerialNode(Node):
                 self.publish("serial/audio_in", payload)
             elif frame_type == FRAME_BUTTON:
                 button_id = payload[0] if payload else BUTTON_BASE
+                action = payload[1] if len(payload) >= 2 else ACTION_DOWN
                 button_name = BUTTON_NAMES.get(button_id, f"unknown_{button_id}")
-                log.info(f"[serial] button frame: id=0x{button_id:02x} ({button_name})")
-                self.publish("serial/button", {"id": button_id, "name": button_name})
+                action_name = "down" if action == ACTION_DOWN else "up"
+                name = f"{button_name}_{action_name}"
+                log.info(f"[serial] button frame: id=0x{button_id:02x} ({name})")
+                self.publish("serial/button", {"id": button_id, "name": name, "action": action_name})
             else:
                 log.debug(f"[serial] unknown frame type 0x{frame_type:02x}")
 

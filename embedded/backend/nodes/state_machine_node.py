@@ -8,28 +8,40 @@ log = logging.getLogger(__name__)
 
 class State(Enum):
     IDLE = auto()
+    IDLE_ANSWER = auto()
     LISTENING = auto()
     PROCESSING = auto()
     SPEAKING = auto()
+    SPEAKING_ACK = auto()
+    SPEAKING_ANSWER = auto()
 
 
 class Event(Enum):
-    BUTTON_BASE = auto()
+    BUTTON_BASE_DOWN = auto()
+    BUTTON_BASE_UP = auto()
     BUTTON_OPEN_LID = auto()
+    BUTTON_CLOSE_LID = auto()
     TRANSCRIPTION_READY = auto()
     SPEECH_DONE = auto()
 
 
 TRANSITIONS: dict[tuple[State, Event], State] = {
-    # base button: toggle listening / stop listening
-    (State.IDLE, Event.BUTTON_BASE): State.LISTENING,
-    (State.LISTENING, Event.BUTTON_BASE): State.PROCESSING,
+    # base button down: start listening
+    (State.IDLE, Event.BUTTON_BASE_DOWN): State.LISTENING,
+    (State.SPEAKING, Event.BUTTON_BASE_DOWN): State.LISTENING,
+    # base button up while listening: stop listening, start processing
+    (State.LISTENING, Event.BUTTON_BASE_UP): State.PROCESSING,
+    # (State.LISTENING, Event.BUTTON_BASE_UP): State.SP,
+    # base button up while processing: speak the transcription
+    # (State.PROCESSING, Event.BUTTON_BASE_UP): State.SPEAKING,
+    (State.PROCESSING, Event.TRANSCRIPTION_READY): State.SPEAKING_ACK,
     # open lid: go straight to speaking a prompt
     (State.IDLE, Event.BUTTON_OPEN_LID): State.SPEAKING,
-    # transcription finishes -> speak it back via TTS
-    (State.PROCESSING, Event.TRANSCRIPTION_READY): State.SPEAKING,
     # speech finishes
-    (State.SPEAKING, Event.SPEECH_DONE): State.IDLE,
+    (State.SPEAKING_ACK, Event.SPEECH_DONE): State.SPEAKING_ANSWER,
+    (State.SPEAKING_ANSWER, Event.SPEECH_DONE): State.IDLE_ANSWER,
+    (State.IDLE_ANSWER, Event.BUTTON_BASE_DOWN): State.SPEAKING_ANSWER,
+    # (State.SPEAKING, Event.SPEECH_DONE): State.IDLE,
 }
 
 OPEN_LID_PROMPT = "What is the most embarrassing thing you've done?"
@@ -47,6 +59,16 @@ class StateMachineNode(Node):
         self.subscribe("tts/done", self._on_tts_done)
 
     def _transition(self, event: Event):
+        if event == Event.BUTTON_CLOSE_LID:
+            prev = self.state
+            self.state = State.IDLE
+            log.info(f"[state_machine] {prev.name} -> IDLE (on BUTTON_CLOSE_LID)")
+            self.publish("state/changed", {"from": prev, "to": State.IDLE, "event": event})
+            if prev == State.LISTENING:
+                self.publish("state/listening", False)
+                self.publish("serial/led", {"led": "red", "on": False})
+            return
+
         key = (self.state, event)
         next_state = TRANSITIONS.get(key)
         if next_state is None:
@@ -65,8 +87,21 @@ class StateMachineNode(Node):
             self.publish("state/listening", False)
             self.publish("serial/led", {"led": "red", "on": False})
 
+        if next_state == State.SPEAKING_ACK:
+            log.info("[state_machine] requesting TTS: 'thanks!'")
+            self.publish("tts/speak", "thanks!")
+
+        if next_state == State.SPEAKING_ANSWER:
+            text = getattr(self, "_last_transcription", "")
+            log.info(f"[state_machine] requesting TTS (answer): {text!r}")
+            self.publish("tts/speak", "SPEAKING_TEXT")
+
         if next_state == State.SPEAKING:
-            text = getattr(self, "_last_transcription", "") if prev == State.PROCESSING else OPEN_LID_PROMPT
+            text = (
+                getattr(self, "_last_transcription", "")
+                if prev == State.PROCESSING
+                else OPEN_LID_PROMPT
+            )
             log.info(f"[state_machine] requesting TTS: {text!r}")
             self.publish("tts/speak", text)
 
@@ -75,12 +110,20 @@ class StateMachineNode(Node):
     def _on_button(self, msg: Message):
         button = msg.data
         name = button["name"]
-        log.info(f"[state_machine] button event received: {name} (state={self.state.name})")
+        log.info(
+            f"[state_machine] button event received: {name} (state={self.state.name})"
+        )
 
         if name == "open_lid":
             self._transition(Event.BUTTON_OPEN_LID)
-        elif name == "base":
-            self._transition(Event.BUTTON_BASE)
+        elif name == "close_lid":
+            self._transition(Event.BUTTON_CLOSE_LID)
+        elif name == "base_down":
+            if self.state == State.LISTENING:
+                return
+            self._transition(Event.BUTTON_BASE_DOWN)
+        elif name == "base_up":
+            self._transition(Event.BUTTON_BASE_UP)
         else:
             log.warning(f"[state_machine] unknown button type: {name}")
 
@@ -88,8 +131,8 @@ class StateMachineNode(Node):
         text = msg.data
         log.info(f"[state_machine] transcription: {text!r}")
         self._last_transcription = text
-        self._transition(Event.TRANSCRIPTION_READY)
         self.publish("state/transcription_text", text)
+        self._transition(Event.TRANSCRIPTION_READY)
 
     def _on_tts_done(self, msg: Message):
         log.info("[state_machine] TTS playback finished")
