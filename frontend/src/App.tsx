@@ -1,114 +1,120 @@
 import { useState } from "react";
 import "./App.css";
 
-const TEST_QUESTION = "What is the capital of France?";
-const TEST_ANSWERS = [
-  "Paris is the capital city of France.",
-  "The Eiffel Tower is in Paris.",
-  "Berlin is the capital of Germany.",
-  "France is a country in Western Europe.",
-  "Lyon is a major city in France.",
-];
+interface Question {
+  id: number;
+  text: string;
+  created_at: string;
+}
+
+interface Answer {
+  id: number;
+  uuid: string;
+  question_id: number;
+  text: string;
+  created_at: string;
+}
 
 function App() {
   const [output, setOutput] = useState<string[]>([]);
-  const [similarityQuery, setSimilarityQuery] = useState("");
+  const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
+  const [answerText, setAnswerText] = useState("");
+  const [answerUuid, setAnswerUuid] = useState("");
+  const [storedAnswers, setStoredAnswers] = useState<Answer[]>([]);
+  const [selectedUuid, setSelectedUuid] = useState("");
 
   const log = (msg: string) => setOutput((prev) => [...prev, msg]);
 
-  const testHealth = async () => {
-    const res = await fetch("/api/health");
+  const getRandomQuestion = async () => {
+    const res = await fetch("/api/questions/random");
     const data = await res.json();
-    log(`GET /health → ${JSON.stringify(data)}`);
+    if (!res.ok) { log(`GET /questions/random → error: ${data.error}`); return; }
+    setCurrentQuestion(data);
+    setStoredAnswers([]);
+    setSelectedUuid("");
+    log(`GET /questions/random → [${data.id}] "${data.text}"`);
   };
 
-  const testAddAnswer = async () => {
-    const res = await fetch("/api/answers", {
+  const postAnswer = async () => {
+    if (!currentQuestion) { log("Get a question first"); return; }
+    if (!answerText.trim()) { log("Enter answer text"); return; }
+    const uuid = answerUuid.trim() || crypto.randomUUID();
+    const res = await fetch(`/api/questions/${currentQuestion.id}/answers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: TEST_QUESTION, answer: "Paris" }),
+      body: JSON.stringify({ answer: answerText, uuid }),
     });
-    const data = await res.json();
-    log(`POST /answers → ${JSON.stringify(data)}`);
+    const data: Answer = await res.json();
+    setStoredAnswers((prev) => [...prev, data]);
+    log(`POST /questions/${currentQuestion.id}/answers → uuid=${data.uuid} "${data.text}"`);
+    setAnswerText("");
+    setAnswerUuid("");
   };
 
-  const testGetQuestions = async () => {
-    const res = await fetch("/api/questions");
+  const getSimilar = async () => {
+    if (!currentQuestion) { log("Get a question first"); return; }
+    if (!selectedUuid) { log("Select an answer to compare"); return; }
+    const res = await fetch(`/api/questions/${currentQuestion.id}/answers/${selectedUuid}/similar`);
     const data = await res.json();
-    log(`GET /questions → ${JSON.stringify(data)}`);
-  };
-
-  const testGetAnswers = async () => {
-    const questionsRes = await fetch("/api/questions");
-    const questions = await questionsRes.json();
-    if (questions.length === 0) {
-      log("No questions yet — add an answer first");
-      return;
-    }
-    const id = questions[0].id;
-    const res = await fetch(`/api/questions/${id}/answers`);
-    const data = await res.json();
-    log(`GET /questions/${id}/answers → ${JSON.stringify(data)}`);
-  };
-
-  const seedAnswers = async () => {
-    for (const answer of TEST_ANSWERS) {
-      await fetch("/api/answers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: TEST_QUESTION, answer }),
-      });
-    }
-    log(`Seeded ${TEST_ANSWERS.length} answers for "${TEST_QUESTION}"`);
-  };
-
-  const testSimilarity = async () => {
-    if (!similarityQuery.trim()) {
-      log("Enter a query first");
-      return;
-    }
-    const questionsRes = await fetch("/api/questions");
-    const questions = await questionsRes.json();
-    const q = questions.find((q: { text: string }) => q.text === TEST_QUESTION);
-    if (!q) {
-      log(`Question not found — seed answers first`);
-      return;
-    }
-    log(`Querying similarity for: "${similarityQuery}" (this may take a moment on first run)...`);
-    const res = await fetch(`/api/questions/${q.id}/similar`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answer: similarityQuery }),
-    });
-    const data = await res.json();
-    log(`Most similar → "${data.answer.text}" (score: ${data.score.toFixed(3)})`);
+    if (!res.ok) { log(`GET .../similar → error: ${data.error}`); return; }
+    log(`GET .../similar for uuid=${selectedUuid} → "${data.answer.text}" (score: ${data.score.toFixed(3)})`);
   };
 
   return (
-    <div style={{ padding: 24, fontFamily: "monospace" }}>
-      <h2>API Tests</h2>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        <button onClick={testHealth}>GET /health</button>
-        <button onClick={testAddAnswer}>POST /answers</button>
-        <button onClick={testGetQuestions}>GET /questions</button>
-        <button onClick={testGetAnswers}>GET /questions/:id/answers</button>
-        <button onClick={() => setOutput([])}>Clear</button>
-      </div>
+    <div style={{ padding: 24, fontFamily: "monospace", maxWidth: 700 }}>
+      <h2>1. Get a random question</h2>
+      <button onClick={getRandomQuestion}>GET /questions/random</button>
+      {currentQuestion && (
+        <p style={{ marginTop: 8 }}>
+          <strong>[{currentQuestion.id}]</strong> {currentQuestion.text}
+        </p>
+      )}
 
-      <h2>Similarity Test</h2>
-      <p style={{ margin: "4px 0 8px" }}>Question: <em>"{TEST_QUESTION}"</em></p>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-        <button onClick={seedAnswers}>Seed answers</button>
+      <h2>2. Submit an answer</h2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 400 }}>
         <input
-          value={similarityQuery}
-          onChange={(e) => setSimilarityQuery(e.target.value)}
-          placeholder="Type a query answer..."
-          style={{ padding: "4px 8px", fontFamily: "monospace", width: 300 }}
+          value={answerText}
+          onChange={(e) => setAnswerText(e.target.value)}
+          placeholder="Answer text"
+          style={{ padding: "4px 8px", fontFamily: "monospace" }}
         />
-        <button onClick={testSimilarity}>Find most similar</button>
+        <input
+          value={answerUuid}
+          onChange={(e) => setAnswerUuid(e.target.value)}
+          placeholder="UUID (leave blank to auto-generate)"
+          style={{ padding: "4px 8px", fontFamily: "monospace" }}
+        />
+        <button onClick={postAnswer} style={{ alignSelf: "flex-start" }}>
+          POST /questions/:id/answers
+        </button>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 16 }}>
+      {storedAnswers.length > 0 && (
+        <>
+          <h2>3. Find most similar answer</h2>
+          <p style={{ margin: "4px 0 8px" }}>Select the answer to compare against:</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+            {storedAnswers.map((a) => (
+              <label key={a.uuid} style={{ cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="uuid"
+                  value={a.uuid}
+                  checked={selectedUuid === a.uuid}
+                  onChange={() => setSelectedUuid(a.uuid)}
+                  style={{ marginRight: 8 }}
+                />
+                "{a.text}" <span style={{ color: "#888" }}>({a.uuid.slice(0, 8)}...)</span>
+              </label>
+            ))}
+          </div>
+          <button onClick={getSimilar}>GET /questions/:id/answers/:uuid/similar</button>
+        </>
+      )}
+
+      <h2>Log</h2>
+      <button onClick={() => setOutput([])} style={{ marginBottom: 8 }}>Clear</button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {output.map((line, i) => (
           <div key={i} style={{ background: "#111", color: "#0f0", padding: "4px 8px", borderRadius: 4 }}>
             {line}

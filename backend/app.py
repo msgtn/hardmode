@@ -15,6 +15,14 @@ def health():
     return {"status": "ok"}
 
 
+@app.route("/questions/random", methods=["GET"])
+def random_question():
+    question = db.get_random_question()
+    if not question:
+        return jsonify({"error": "No questions in database"}), 404
+    return jsonify(question)
+
+
 @app.route("/questions", methods=["GET"])
 def get_questions():
     return jsonify(db.get_questions())
@@ -25,26 +33,25 @@ def get_answers(question_id):
     return jsonify(db.get_answers(question_id))
 
 
-@app.route("/answers", methods=["POST"])
-def add_answer():
+@app.route("/questions/<int:question_id>/answers", methods=["POST"])
+def add_answer(question_id):
     body = request.get_json()
-    answer = db.add_answer(body["question"], body["answer"])
+    answer = db.add_answer(question_id, body["answer"], body["uuid"])
     return jsonify(answer), 201
 
 
-@app.route("/questions/<int:question_id>/similar", methods=["POST"])
-def get_similar(question_id):
-    body = request.get_json()
-    query = body["answer"]
+@app.route("/questions/<int:question_id>/answers/<uuid>/similar", methods=["GET"])
+def get_similar(question_id, uuid):
+    target = db.get_answer_by_uuid(uuid)
+    if not target:
+        return jsonify({"error": "Answer not found"}), 404
 
-    answers = db.get_answers(question_id)
-    candidates = [a["text"] for a in answers]
-
+    candidates = db.get_answers_excluding(question_id, uuid)
     if not candidates:
-        return jsonify({"error": "No answers for this question"}), 404
+        return jsonify({"error": "No other answers to compare"}), 404
 
-    best_idx, score = similarity.most_similar(query, candidates)
-    return jsonify({"answer": answers[best_idx], "score": score})
+    best_idx, score = similarity.most_similar(target["text"], [a["text"] for a in candidates])
+    return jsonify({"answer": candidates[best_idx], "score": score})
 
 
 @socketio.on("connect")

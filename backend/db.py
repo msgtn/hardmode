@@ -4,6 +4,15 @@ from contextlib import contextmanager
 DB_PATH = "data.db"
 
 
+QUESTIONS = [
+    "Are you missing anyone right now? Do you think they are missing you too?",
+    "What's the best compliment a stranger has ever given you?",
+    "How are you, really?",
+    "What lesson should you have learned by now?",
+    "What made you happiest as a child?",
+]
+
+
 def init_db():
     with _conn() as conn:
         conn.executescript("""
@@ -14,11 +23,16 @@ def init_db():
             );
             CREATE TABLE IF NOT EXISTS answers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                uuid TEXT NOT NULL UNIQUE,
                 question_id INTEGER NOT NULL REFERENCES questions(id),
                 text TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        conn.executemany(
+            "INSERT OR IGNORE INTO questions (text) VALUES (?)",
+            [(q,) for q in QUESTIONS],
+        )
 
 
 @contextmanager
@@ -32,24 +46,41 @@ def _conn():
         conn.close()
 
 
-def add_answer(question_text: str, answer_text: str) -> dict:
-    """Insert question if it doesn't exist, then add an answer. Returns the answer row."""
+def get_random_question() -> dict | None:
     with _conn() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO questions (text) VALUES (?)", (question_text,)
+        row = conn.execute(
+            "SELECT * FROM questions ORDER BY RANDOM() LIMIT 1"
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def add_answer(question_id: int, text: str, uuid: str) -> dict:
+    with _conn() as conn:
+        cursor = conn.execute(
+            "INSERT INTO answers (uuid, question_id, text) VALUES (?, ?, ?)",
+            (uuid, question_id, text),
         )
         row = conn.execute(
-            "SELECT id FROM questions WHERE text = ?", (question_text,)
-        ).fetchone()
-        question_id = row["id"]
-        cursor = conn.execute(
-            "INSERT INTO answers (question_id, text) VALUES (?, ?)",
-            (question_id, answer_text),
-        )
-        answer = conn.execute(
             "SELECT * FROM answers WHERE id = ?", (cursor.lastrowid,)
         ).fetchone()
-        return dict(answer)
+        return dict(row)
+
+
+def get_answer_by_uuid(uuid: str) -> dict | None:
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT * FROM answers WHERE uuid = ?", (uuid,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_answers_excluding(question_id: int, exclude_uuid: str) -> list[dict]:
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM answers WHERE question_id = ? AND uuid != ? ORDER BY created_at ASC",
+            (question_id, exclude_uuid),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_questions() -> list[dict]:
