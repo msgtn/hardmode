@@ -1,20 +1,21 @@
 # Embedded Firmware
 
-Arduino Nano 33 IoT firmware that communicates with the backend over serial using a framed protocol.
+XIAO ESP32S3 Sense firmware that communicates with the backend over serial using a framed protocol. Reads audio from the built-in PDM microphone (16kHz, 16-bit mono) and sends it to the host.
 
 ## Prerequisites
 
 - [Arduino CLI](https://arduino.github.io/arduino-cli/) or Arduino IDE
-- Arduino SAMD Boards package:
+- ESP32 board package:
   ```bash
-  arduino-cli core install arduino:samd
+  arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+  arduino-cli core install esp32:esp32
   ```
 
 ## Compile and Upload
 
 ```bash
-arduino-cli compile -b arduino:samd:nano_33_iot firmware/
-arduino-cli upload -b arduino:samd:nano_33_iot -p /dev/ttyACM0 firmware/
+arduino-cli compile -b esp32:esp32:XIAO_ESP32S3 firmware/
+arduino-cli upload -b esp32:esp32:XIAO_ESP32S3 -p /dev/ttyACM0 firmware/
 ```
 
 ## Protocol

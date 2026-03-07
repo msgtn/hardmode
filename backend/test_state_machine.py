@@ -68,6 +68,15 @@ def main():
     else:
         log.info("[test] TTS node skipped (use --tts to enable)")
 
+    def on_partial(msg):
+        print(f"\r  [partial] {msg.data}", flush=True)
+
+    def on_final(msg):
+        print(f"\n  [final]   {msg.data}", flush=True)
+
+    bus.subscribe("stt/partial", on_partial)
+    bus.subscribe("stt/transcription", on_final)
+
     for node in nodes:
         node.start()
 

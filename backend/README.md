@@ -13,7 +13,7 @@ ROS-like node architecture using [Zenoh](https://zenoh.io/) for pub/sub messagin
 |------|------|------------|-----------|
 | **SerialNode** | `nodes/serial_node.py` | `serial/audio_out` | `serial/audio_in`, `serial/button` |
 | **StateMachineNode** | `nodes/state_machine_node.py` | `serial/button`, `stt/transcription` | `state/changed`, `state/listening`, `state/transcription_text` |
-| **STTNode** | `nodes/stt_node.py` | `serial/audio_in`, `state/listening` | `stt/transcription` |
+| **STTNode** | `nodes/stt_node.py` | `serial/audio_in`, `state/listening` | `stt/transcription`, `stt/partial` |
 
 ## State machine
 
