@@ -1,7 +1,8 @@
 import logging
+import uuid
 from enum import Enum, auto
 
-from nodes.base import Node, MessageBus, Message
+from nodes.base import Node, MessageBus, Message, Question
 
 log = logging.getLogger(__name__)
 
@@ -54,12 +55,18 @@ class StateMachineNode(Node):
         super().__init__("state_machine", bus)
         self.state = State.IDLE
 
-        self._random_question = ""
+        self._random_question: Question | None = None
+        self._session_id: str = ""
 
         self.subscribe("serial/button", self._on_button)
         self.subscribe("stt/transcription", self._on_transcription)
         self.subscribe("tts/done", self._on_tts_done)
         self.subscribe("api/questions/random/response", self._on_random_question)
+
+    def _fetch_random_question(self):
+        self._session_id = str(uuid.uuid4())
+        log.info(f"[state_machine] new session_id={self._session_id}")
+        self.publish("api/questions/random", {})
 
     def _transition(self, event: Event):
         if event == Event.BUTTON_CLOSE_LID:
@@ -72,7 +79,7 @@ class StateMachineNode(Node):
                 self.publish("serial/led", {"led": "red", "on": False})
             if prev in (State.SPEAKING, State.SPEAKING_ACK, State.SPEAKING_ANSWER):
                 self.publish("serial/led", {"led": "green", "on": False})
-            self.publish("api/questions/random", {})
+            self._fetch_random_question()
             return
 
         key = (self.state, event)
@@ -102,6 +109,12 @@ class StateMachineNode(Node):
         if next_state == State.SPEAKING_ACK:
             log.info("[state_machine] requesting TTS: 'thanks!'")
             self.publish("tts/speak", "thanks!")
+            if self._random_question:
+                self.publish("api/submit", {
+                    "question_id": self._random_question.id,
+                    "answer": getattr(self, "_last_transcription", ""),
+                    "uuid": self._session_id,
+                })
 
         if next_state == State.SPEAKING_ANSWER:
             text = getattr(self, "_last_transcription", "")
@@ -109,10 +122,10 @@ class StateMachineNode(Node):
             self.publish("tts/speak", "SPEAKING_TEXT")
 
         if next_state == State.IDLE:
-            self.publish("api/questions/random", {})
+            self._fetch_random_question()
 
         if next_state == State.SPEAKING:
-            text = self._random_question or OPEN_LID_PROMPT
+            text = self._random_question.text if self._random_question else OPEN_LID_PROMPT
             log.info(f"[state_machine] requesting TTS: {text!r}")
             self.publish("tts/speak", text)
 
@@ -139,8 +152,9 @@ class StateMachineNode(Node):
             log.warning(f"[state_machine] unknown button type: {name}")
 
     def _on_random_question(self, msg: Message):
-        self._random_question = msg.data
-        log.info(f"[state_machine] stored random question: {msg.data!r}")
+        question: Question = msg.data
+        self._random_question = question
+        log.info(f"[state_machine] stored random question (id={question.id}): {question.text!r}")
 
     def _on_transcription(self, msg: Message):
         text = msg.data
@@ -156,7 +170,7 @@ class StateMachineNode(Node):
     def _run(self):
         import time
 
-        self.publish("api/questions/random", {})
+        self._fetch_random_question()
 
         while self._running:
             time.sleep(0.1)

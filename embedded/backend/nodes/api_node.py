@@ -5,7 +5,7 @@ import json
 from urllib.request import urlopen, Request
 from urllib.error import URLError
 
-from nodes.base import Node, MessageBus, Message
+from nodes.base import Node, MessageBus, Message, Question
 
 log = logging.getLogger(__name__)
 
@@ -26,6 +26,7 @@ class APINode(Node):
         self.subscribe("state/changed", self._on_state_changed)
         self.subscribe("state/transcription_text", self._on_transcription)
         self.subscribe("api/questions/random", self._on_questions_random)
+        self.subscribe("api/submit", self._on_submit)
 
         node_ref = self
         class Handler(BaseHTTPRequestHandler):
@@ -83,11 +84,25 @@ class APINode(Node):
         try:
             resp = urlopen("http://10.31.156.57:5000/questions/random", timeout=5)
             data = json.loads(resp.read())
-            text = data.get("text", "") if isinstance(data, dict) else str(data)
-            log.info(f"[api] random question: {text!r}")
-            self.publish("api/questions/random/response", text)
+            question = Question(id=data.get("id", 0), text=data.get("text", ""))
+            log.info(f"[api] random question (id={question.id}): {question.text!r}")
+            self.publish("api/questions/random/response", question)
         except (URLError, json.JSONDecodeError, OSError) as e:
             log.error(f"[api] failed to fetch random question: {e}")
+
+    def _on_submit(self, msg: Message):
+        question_id = msg.data["question_id"]
+        payload = json.dumps({
+            "answer": msg.data["answer"],
+            "uuid": msg.data["uuid"],
+        }).encode()
+        url = f"http://10.31.156.57:5000/questions/{question_id}/answers"
+        try:
+            req = Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+            resp = urlopen(req, timeout=5)
+            log.info(f"[api] submitted answer for question {question_id}: {resp.status}")
+        except (URLError, OSError) as e:
+            log.error(f"[api] failed to submit answer: {e}")
 
     def _on_state_changed(self, msg: Message):
         self._state = msg.data["to"].name

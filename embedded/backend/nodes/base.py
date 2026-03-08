@@ -15,6 +15,12 @@ class Message:
     data: Any
 
 
+@dataclass
+class Question:
+    id: int
+    text: str
+
+
 class MessageBus:
     """Pub/sub message bus backed by Zenoh."""
 
