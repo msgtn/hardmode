@@ -30,7 +30,7 @@ uint8_t neoR = 0, neoG = 0, neoB = 0;
 uint8_t neoBrightness = 32;  // global brightness scale (0–255)
 
 // Audio output via PWM
-constexpr int AUDIO_OUT_PIN = 2;   // GPIO2 (D1/A1) — connect speaker/amplifier here
+constexpr int AUDIO_OUT_PIN = 3;   // GPIO2 (D1/A1) — connect speaker/amplifier here
 constexpr int PWM_FREQ      = 40000;  // 40kHz carrier, well above audible range
 constexpr int PWM_RESOLUTION = 8;     // 8-bit duty cycle (0–255)
 
@@ -41,12 +41,19 @@ volatile int ringHead = 0;  // written by main loop (core 1)
 volatile int ringTail = 0;  // read by audio task (core 0)
 
 // Button config
-constexpr int BUTTON_PIN = 1;     // GPIO1 — BUTTON_BASE
-constexpr uint8_t BUTTON_BASE_ID = 0x01;  // must match backend BUTTON_BASE
 constexpr unsigned long DEBOUNCE_MS = 50;
-bool lastReading = LOW;
-bool buttonState = LOW;
-unsigned long lastDebounceTime = 0;
+
+constexpr int BUTTON_BASE_PIN = 1;       // GPIO1
+constexpr uint8_t BUTTON_BASE_ID = 0x01; // must match backend BUTTON_BASE
+bool baseLastReading = LOW;
+bool baseButtonState = LOW;
+unsigned long baseDebounceTime = 0;
+
+constexpr int BUTTON_LID_PIN = 2;          // GPIO3
+constexpr uint8_t BUTTON_OPEN_LID_ID = 0x02; // must match backend BUTTON_OPEN_LID
+bool lidLastReading = LOW;
+bool lidButtonState = LOW;
+unsigned long lidDebounceTime = 0;
 
 // Mutex for Serial writes (mic task and main loop both write)
 SemaphoreHandle_t serialMutex;
@@ -174,7 +181,8 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
 
-  pinMode(BUTTON_PIN, INPUT_PULLDOWN);
+  pinMode(BUTTON_BASE_PIN, INPUT_PULLDOWN);
+  pinMode(BUTTON_LID_PIN, INPUT_PULLDOWN);
 
   neopixel.begin();
   neopixel.clear();
@@ -206,25 +214,30 @@ void setup() {
 // Main loop (core 1): dedicated to servicing incoming serial without blocking
 unsigned long lastNeoRefresh = 0;
 
-void checkButton() {
-  bool reading = digitalRead(BUTTON_PIN);
-  if (reading != lastReading) {
-    lastDebounceTime = millis();
+void debounceButton(int pin, bool &lastRd, bool &state, unsigned long &dbTime, uint8_t id) {
+  bool reading = digitalRead(pin);
+  if (reading != lastRd) {
+    dbTime = millis();
   }
-  lastReading = reading;
+  lastRd = reading;
 
-  if ((millis() - lastDebounceTime) > DEBOUNCE_MS) {
-    if (reading != buttonState) {
-      buttonState = reading;
-      uint8_t payload[2] = { BUTTON_BASE_ID, buttonState ? (uint8_t)1 : (uint8_t)0 };
+  if ((millis() - dbTime) > DEBOUNCE_MS) {
+    if (reading != state) {
+      state = reading;
+      uint8_t payload[2] = { id, state ? (uint8_t)1 : (uint8_t)0 };
       sendFrame(FRAME_BUTTON, payload, 2);
     }
   }
 }
 
+void checkButtons() {
+  debounceButton(BUTTON_BASE_PIN, baseLastReading, baseButtonState, baseDebounceTime, BUTTON_BASE_ID);
+  debounceButton(BUTTON_LID_PIN, lidLastReading, lidButtonState, lidDebounceTime, BUTTON_OPEN_LID_ID);
+}
+
 void loop() {
   handleIncoming();
-  checkButton();
+  checkButtons();
 
   // Refresh NeoPixel every 100ms to recover from glitched show() calls
   unsigned long now = millis();

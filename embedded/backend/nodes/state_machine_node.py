@@ -10,6 +10,7 @@ log = logging.getLogger(__name__)
 
 class State(Enum):
     IDLE = auto()
+    IDLE_WAIT = auto()
     IDLE_ANSWER = auto()
     LISTENING = auto()
     PROCESSING = auto()
@@ -31,6 +32,8 @@ TRANSITIONS: dict[tuple[State, Event], State] = {
     # base button down: start listening
     (State.IDLE, Event.BUTTON_BASE_DOWN): State.LISTENING,
     (State.SPEAKING, Event.BUTTON_BASE_DOWN): State.LISTENING,
+    (State.SPEAKING, Event.SPEECH_DONE): State.IDLE_WAIT,
+    (State.IDLE_WAIT, Event.BUTTON_BASE_DOWN): State.LISTENING,
     # base button up while listening: stop listening, start processing
     (State.LISTENING, Event.BUTTON_BASE_UP): State.PROCESSING,
     # (State.LISTENING, Event.BUTTON_BASE_UP): State.SP,
@@ -128,7 +131,7 @@ class StateMachineNode(Node):
             if self._answers:
                 text = "Someone else's answer: " + random.choice(self._answers)
             else:
-                text = "There are no other answers to say."
+                text = "There are no other answers for this question."
             log.info(f"[state_machine] requesting TTS (answer): {text!r}")
             self.publish("tts/speak", text)
 
@@ -151,9 +154,9 @@ class StateMachineNode(Node):
             f"[state_machine] button event received: {name} (state={self.state.name})"
         )
 
-        if name == "open_lid":
+        if name == "open_lid_up":
             self._transition(Event.BUTTON_OPEN_LID)
-        elif name == "close_lid":
+        elif name == "open_lid_down":
             self._transition(Event.BUTTON_CLOSE_LID)
         elif name == "base_down":
             if self.state == State.LISTENING:
