@@ -41,10 +41,18 @@ Commands:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--serial", action="store_true", help="Load serial node (reads from device)")
-    parser.add_argument("--stt", action="store_true", help="Load STT node with whisper model")
-    parser.add_argument("--tts", action="store_true", help="Load TTS node with piper model")
-    parser.add_argument("--api", action="store_true", help="Load API node (HTTP server)")
+    parser.add_argument(
+        "--serial", action="store_true", help="Load serial node (reads from device)"
+    )
+    parser.add_argument(
+        "--stt", action="store_true", help="Load STT node with whisper model"
+    )
+    parser.add_argument(
+        "--tts", action="store_true", help="Load TTS node with piper model"
+    )
+    parser.add_argument(
+        "--api", action="store_true", help="Load API node (HTTP server)"
+    )
     args = parser.parse_args()
 
     bus = MessageBus()
@@ -53,6 +61,7 @@ def main():
 
     if args.serial:
         from nodes import SerialNode
+
         serial_node = SerialNode(bus)
         nodes.append(serial_node)
     else:
@@ -60,6 +69,7 @@ def main():
 
     if args.stt:
         from nodes import STTNode
+
         stt = STTNode(bus)
         nodes.append(stt)
     else:
@@ -67,6 +77,7 @@ def main():
 
     if args.tts:
         from nodes import TTSNode
+
         tts = TTSNode(bus)
         nodes.append(tts)
     else:
@@ -74,6 +85,7 @@ def main():
 
     if args.api:
         from nodes import APINode
+
         api = APINode(bus)
         nodes.append(api)
     else:
@@ -118,16 +130,20 @@ def main():
         arg = parts[1] if len(parts) > 1 else ""
 
         if cmd in ("bd", "base_down"):
-            bus.publish("serial/button", {"id": 0x01, "name": "base_down", "action": "down"})
+            bus.publish(
+                "serial/button", {"id": 0x01, "name": "base_down", "action": "down"}
+            )
 
         elif cmd in ("bu", "base_up"):
-            bus.publish("serial/button", {"id": 0x01, "name": "base_up", "action": "up"})
+            bus.publish(
+                "serial/button", {"id": 0x01, "name": "base_up", "action": "up"}
+            )
 
-        elif cmd in ("o", "open_lid", "open", "lid"):
-            bus.publish("serial/button", {"id": 0x02, "name": "open_lid"})
+        elif cmd in ("o", "open_lid_up", "open", "lid"):
+            bus.publish("serial/button", {"id": 0x02, "name": "open_lid_up"})
 
-        elif cmd in ("c", "close_lid", "close"):
-            bus.publish("serial/button", {"id": 0x02, "name": "close_lid"})
+        elif cmd in ("c", "open_lid_down", "close"):
+            bus.publish("serial/button", {"id": 0x02, "name": "open_lid_down"})
 
         elif cmd in ("a", "audio"):
             n = int(arg) if arg.isdigit() else 10

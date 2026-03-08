@@ -11,9 +11,14 @@ log = logging.getLogger(__name__)
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8080
-BACKEND_URL = "http://10.31.156.57:5000"
-BACKEND_URL = "https://superdevilishly-unhomely-carol.ngrok-free.dev"
+# BACKEND_URL = "http://10.31.156.57:5000"
+# BACKEND_URL = "https://superdevilishly-unhomely-carol.ngrok-free.dev"
 # BACKEND_URL = "https://overstoutly-unimitated-kera.ngrok-free.dev"
+BACKEND_URLS = [
+    "http://10.31.156.57:5000",
+    "https://superdevilishly-unhomely-carol.ngrok-free.dev",
+    "https://overstoutly-unimitated-kera.ngrok-free.dev",
+]
 
 
 class APINode(Node):
@@ -27,6 +32,7 @@ class APINode(Node):
         self.port = port
         self._state = "IDLE"
         self._last_transcription = ""
+        self._backend_url: str | None = None
 
         self.subscribe("state/changed", self._on_state_changed)
         self.subscribe("state/transcription_text", self._on_transcription)
@@ -95,9 +101,26 @@ class APINode(Node):
 
         self._handler_class = Handler
 
+    def _resolve_backend(self) -> str | None:
+        if self._backend_url:
+            return self._backend_url
+        for url in BACKEND_URLS:
+            try:
+                urlopen(f"{url}/questions/random", timeout=3)
+                self._backend_url = url
+                log.info(f"[api] using backend: {url}")
+                return url
+            except (URLError, OSError):
+                log.debug(f"[api] backend unreachable: {url}")
+        log.error("[api] no reachable backend found")
+        return None
+
     def _on_questions_random(self, msg: Message):
+        base = self._resolve_backend()
+        if not base:
+            return
         try:
-            resp = urlopen(f"{BACKEND_URL}/questions/random", timeout=5)
+            resp = urlopen(f"{base}/questions/random", timeout=5)
             data = json.loads(resp.read())
             question = Question(id=data.get("id", 0), text=data.get("text", ""))
             log.info(f"[api] random question (id={question.id}): {question.text!r}")
@@ -106,6 +129,9 @@ class APINode(Node):
             log.error(f"[api] failed to fetch random question: {e}")
 
     def _on_submit(self, msg: Message):
+        base = self._resolve_backend()
+        if not base:
+            return
         question_id = msg.data["question_id"]
         payload = json.dumps(
             {
@@ -113,7 +139,7 @@ class APINode(Node):
                 "uuid": msg.data["uuid"],
             }
         ).encode()
-        url = f"{BACKEND_URL}/questions/{question_id}/answers"
+        url = f"{base}/questions/{question_id}/answers"
         try:
             req = Request(
                 url,
@@ -129,8 +155,11 @@ class APINode(Node):
             log.error(f"[api] failed to submit answer: {e}")
 
     def _on_answers(self, msg: Message):
+        base = self._resolve_backend()
+        if not base:
+            return
         question_id = msg.data["question_id"]
-        url = f"{BACKEND_URL}/questions/{question_id}/answers"
+        url = f"{base}/questions/{question_id}/answers"
         try:
             resp = urlopen(url, timeout=5)
             data = json.loads(resp.read())

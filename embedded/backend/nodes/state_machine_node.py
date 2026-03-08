@@ -65,6 +65,7 @@ class StateMachineNode(Node):
 
         self.subscribe("serial/button", self._on_button)
         self.subscribe("stt/transcription", self._on_transcription)
+        self.subscribe("stt/partial", self._on_transcription)
         self.subscribe("tts/done", self._on_tts_done)
         self.subscribe("api/questions/random/response", self._on_random_question)
         self.subscribe("api/answers/response", self._on_answers)
