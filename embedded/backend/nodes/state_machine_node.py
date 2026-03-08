@@ -1,4 +1,5 @@
 import logging
+import random
 import uuid
 from enum import Enum, auto
 
@@ -57,11 +58,13 @@ class StateMachineNode(Node):
 
         self._random_question: Question | None = None
         self._session_id: str = ""
+        self._answers: list[str] = []
 
         self.subscribe("serial/button", self._on_button)
         self.subscribe("stt/transcription", self._on_transcription)
         self.subscribe("tts/done", self._on_tts_done)
         self.subscribe("api/questions/random/response", self._on_random_question)
+        self.subscribe("api/answers/response", self._on_answers)
 
     def _fetch_random_question(self):
         self._session_id = str(uuid.uuid4())
@@ -73,7 +76,9 @@ class StateMachineNode(Node):
             prev = self.state
             self.state = State.IDLE
             log.info(f"[state_machine] {prev.name} -> IDLE (on BUTTON_CLOSE_LID)")
-            self.publish("state/changed", {"from": prev, "to": State.IDLE, "event": event})
+            self.publish(
+                "state/changed", {"from": prev, "to": State.IDLE, "event": event}
+            )
             if prev == State.LISTENING:
                 self.publish("state/listening", False)
                 self.publish("serial/led", {"led": "red", "on": False})
@@ -110,22 +115,30 @@ class StateMachineNode(Node):
             log.info("[state_machine] requesting TTS: 'thanks!'")
             self.publish("tts/speak", "thanks!")
             if self._random_question:
-                self.publish("api/submit", {
-                    "question_id": self._random_question.id,
-                    "answer": getattr(self, "_last_transcription", ""),
-                    "uuid": self._session_id,
-                })
+                self.publish(
+                    "api/submit",
+                    {
+                        "question_id": self._random_question.id,
+                        "answer": getattr(self, "_last_transcription", ""),
+                        "uuid": self._session_id,
+                    },
+                )
 
         if next_state == State.SPEAKING_ANSWER:
-            text = getattr(self, "_last_transcription", "")
+            if self._answers:
+                text = "Someone else's answer: " + random.choice(self._answers)
+            else:
+                text = "There are no other answers to say."
             log.info(f"[state_machine] requesting TTS (answer): {text!r}")
-            self.publish("tts/speak", "SPEAKING_TEXT")
+            self.publish("tts/speak", text)
 
         if next_state == State.IDLE:
             self._fetch_random_question()
 
         if next_state == State.SPEAKING:
-            text = self._random_question.text if self._random_question else OPEN_LID_PROMPT
+            text = (
+                self._random_question.text if self._random_question else OPEN_LID_PROMPT
+            )
             log.info(f"[state_machine] requesting TTS: {text!r}")
             self.publish("tts/speak", text)
 
@@ -154,7 +167,14 @@ class StateMachineNode(Node):
     def _on_random_question(self, msg: Message):
         question: Question = msg.data
         self._random_question = question
-        log.info(f"[state_machine] stored random question (id={question.id}): {question.text!r}")
+        log.info(
+            f"[state_machine] stored random question (id={question.id}): {question.text!r}"
+        )
+        self.publish("api/answers", {"question_id": question.id})
+
+    def _on_answers(self, msg: Message):
+        self._answers = msg.data
+        log.info(f"[state_machine] cached {len(self._answers)} answers")
 
     def _on_transcription(self, msg: Message):
         text = msg.data

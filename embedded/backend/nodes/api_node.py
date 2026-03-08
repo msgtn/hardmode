@@ -27,6 +27,7 @@ class APINode(Node):
         self.subscribe("state/transcription_text", self._on_transcription)
         self.subscribe("api/questions/random", self._on_questions_random)
         self.subscribe("api/submit", self._on_submit)
+        self.subscribe("api/answers", self._on_answers)
 
         node_ref = self
         class Handler(BaseHTTPRequestHandler):
@@ -103,6 +104,18 @@ class APINode(Node):
             log.info(f"[api] submitted answer for question {question_id}: {resp.status}")
         except (URLError, OSError) as e:
             log.error(f"[api] failed to submit answer: {e}")
+
+    def _on_answers(self, msg: Message):
+        question_id = msg.data["question_id"]
+        url = f"http://10.31.156.57:5000/questions/{question_id}/answers"
+        try:
+            resp = urlopen(url, timeout=5)
+            data = json.loads(resp.read())
+            answers = [a.get("text", "") for a in data if isinstance(a, dict)]
+            log.info(f"[api] fetched {len(answers)} answers for question {question_id}")
+            self.publish("api/answers/response", answers)
+        except (URLError, json.JSONDecodeError, OSError) as e:
+            log.error(f"[api] failed to fetch answers: {e}")
 
     def _on_state_changed(self, msg: Message):
         self._state = msg.data["to"].name
