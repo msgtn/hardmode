@@ -11,12 +11,16 @@ log = logging.getLogger(__name__)
 
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8080
+BACKEND_URL = "http://10.31.156.57:5000"
+BACKEND_URL = "https://superdevilishly-unhomely-carol.ngrok-free.dev"
 
 
 class APINode(Node):
     """Exposes a REST API for external clients to interact with the system."""
 
-    def __init__(self, bus: MessageBus, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
+    def __init__(
+        self, bus: MessageBus, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT
+    ):
         super().__init__("api", bus)
         self.host = host
         self.port = port
@@ -30,13 +34,17 @@ class APINode(Node):
         self.subscribe("api/answers", self._on_answers)
 
         node_ref = self
+
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 if self.path == "/status":
-                    self._json_response(200, {
-                        "state": node_ref._state,
-                        "last_transcription": node_ref._last_transcription,
-                    })
+                    self._json_response(
+                        200,
+                        {
+                            "state": node_ref._state,
+                            "last_transcription": node_ref._last_transcription,
+                        },
+                    )
                 else:
                     self._json_response(404, {"error": "not found"})
 
@@ -54,7 +62,12 @@ class APINode(Node):
                     body = self._read_body()
                     name = body.get("name", "")
                     if name not in ("base_down", "base_up", "open_lid"):
-                        self._json_response(400, {"error": "name must be 'base_down', 'base_up', or 'open_lid'"})
+                        self._json_response(
+                            400,
+                            {
+                                "error": "name must be 'base_down', 'base_up', or 'open_lid'"
+                            },
+                        )
                         return
                     node_ref.publish("serial/trigger_button", {"name": name})
                     self._json_response(200, {"status": "ok"})
@@ -83,7 +96,7 @@ class APINode(Node):
 
     def _on_questions_random(self, msg: Message):
         try:
-            resp = urlopen("http://10.31.156.57:5000/questions/random", timeout=5)
+            resp = urlopen(f"{BACKEND_URL}/questions/random", timeout=5)
             data = json.loads(resp.read())
             question = Question(id=data.get("id", 0), text=data.get("text", ""))
             log.info(f"[api] random question (id={question.id}): {question.text!r}")
@@ -93,21 +106,30 @@ class APINode(Node):
 
     def _on_submit(self, msg: Message):
         question_id = msg.data["question_id"]
-        payload = json.dumps({
-            "answer": msg.data["answer"],
-            "uuid": msg.data["uuid"],
-        }).encode()
-        url = f"http://10.31.156.57:5000/questions/{question_id}/answers"
+        payload = json.dumps(
+            {
+                "answer": msg.data["answer"],
+                "uuid": msg.data["uuid"],
+            }
+        ).encode()
+        url = f"{BACKEND_URL}/questions/{question_id}/answers"
         try:
-            req = Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+            req = Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
             resp = urlopen(req, timeout=5)
-            log.info(f"[api] submitted answer for question {question_id}: {resp.status}")
+            log.info(
+                f"[api] submitted answer for question {question_id}: {resp.status}"
+            )
         except (URLError, OSError) as e:
             log.error(f"[api] failed to submit answer: {e}")
 
     def _on_answers(self, msg: Message):
         question_id = msg.data["question_id"]
-        url = f"http://10.31.156.57:5000/questions/{question_id}/answers"
+        url = f"{BACKEND_URL}/questions/{question_id}/answers"
         try:
             resp = urlopen(url, timeout=5)
             data = json.loads(resp.read())
