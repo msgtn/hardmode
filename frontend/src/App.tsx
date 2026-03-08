@@ -22,7 +22,7 @@ function App() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<number, Answer[]>>({});
   const [highlightedUuid, setHighlightedUuid] = useState<string | null>(null);
-  const latestAnswerRef = useRef<HTMLLIElement | null>(null);
+  const latestAnswerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const loadAll = async () => {
@@ -66,9 +66,16 @@ function App() {
   }, []);
 
   return (
-    <div style={{ padding: 24, fontFamily: "monospace", maxWidth: 700, margin: "0 auto" }}>
-      <h1 style={{ color: "red" }}>
-        <em>Close to the Fire</em>
+    <div
+      style={{
+        padding: 24,
+        fontFamily: "monospace",
+        maxWidth: 700,
+        margin: "0 auto",
+      }}
+    >
+      <h1 style={{ color: "red", marginBottom: 32 }}>
+        <em>Closer to the Fire</em>
       </h1>
       {questions.length === 0 && <p>Loading...</p>}
       {questions.map((q) => (
@@ -77,20 +84,23 @@ function App() {
           {(answers[q.id] ?? []).length === 0 ? (
             <p style={{ color: "#888" }}>No answers yet.</p>
           ) : (
-            <ul style={{ paddingLeft: 20, margin: 0 }}>
+            <div>
               {(answers[q.id] ?? []).map((a, i) => (
-                <li
+                <div
                   key={a.uuid}
                   ref={i === 0 ? latestAnswerRef : null}
                   className={
                     a.uuid === highlightedUuid ? "answer-highlight" : undefined
                   }
-                  style={{ marginBottom: 4 }}
+                  style={{
+                    padding: "6px 8px",
+                    background: i % 2 === 0 ? "#fff" : "#f3f4f6",
+                  }}
                 >
                   {a.text}
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </div>
       ))}
