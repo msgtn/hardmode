@@ -1,3 +1,4 @@
+import time
 import logging
 import random
 import uuid
@@ -62,6 +63,8 @@ class StateMachineNode(Node):
         self._random_question: Question | None = None
         self._session_id: str = ""
         self._answers: list[str] = []
+        self._similar_answer: str | None = None
+        self._first_answer_spoken: bool = False
 
         self.subscribe("serial/button", self._on_button)
         self.subscribe("stt/transcription", self._on_transcription)
@@ -69,9 +72,12 @@ class StateMachineNode(Node):
         self.subscribe("tts/done", self._on_tts_done)
         self.subscribe("api/questions/random/response", self._on_random_question)
         self.subscribe("api/answers/response", self._on_answers)
+        self.subscribe("api/similar/response", self._on_similar)
 
     def _fetch_random_question(self):
         self._session_id = str(uuid.uuid4())
+        self._first_answer_spoken = False
+        self._similar_answer = None
         log.info(f"[state_machine] new session_id={self._session_id}")
         self.publish("api/questions/random", {})
 
@@ -127,12 +133,40 @@ class StateMachineNode(Node):
                         "uuid": self._session_id,
                     },
                 )
+                # self.publish(
+                #     "api/similar",
+                #     {
+                #         "question_id": self._random_question.id,
+                #         "uuid": self._session_id,
+                #     },
+                # )
 
         if next_state == State.SPEAKING_ANSWER:
-            if self._answers:
-                text = "Someone else's answer: " + random.choice(self._answers)
+            if not self._first_answer_spoken:
+                self.publish("tts/speak", "Looking for similar answers...")
+                time.sleep(2)
+                if self._random_question:
+                    self.publish(
+                        "api/similar",
+                        {
+                            "question_id": self._random_question.id,
+                            "uuid": self._session_id,
+                        },
+                    )
+                time.sleep(2)
+
+                self._first_answer_spoken = True
+                print(f"{self._similar_answer=}")
+                if self._similar_answer:
+                    text = "A similar answer: " + self._similar_answer
+                else:
+                    text = "Someone else's answer: " + random.choice(self._answers)
+                    # text = "There are no similar answers yet."
             else:
-                text = "There are no other answers for this question."
+                if self._answers:
+                    text = "Someone else's answer: " + random.choice(self._answers)
+                else:
+                    text = "There are no other answers for this question."
             log.info(f"[state_machine] requesting TTS (answer): {text!r}")
             self.publish("tts/speak", text)
 
@@ -175,6 +209,10 @@ class StateMachineNode(Node):
             f"[state_machine] stored random question (id={question.id}): {question.text!r}"
         )
         self.publish("api/answers", {"question_id": question.id})
+
+    def _on_similar(self, msg: Message):
+        self._similar_answer = msg.data
+        log.info(f"[state_machine] similar answer: {msg.data!r}")
 
     def _on_answers(self, msg: Message):
         self._answers = msg.data

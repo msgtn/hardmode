@@ -39,6 +39,7 @@ class APINode(Node):
         self.subscribe("api/questions/random", self._on_questions_random)
         self.subscribe("api/submit", self._on_submit)
         self.subscribe("api/answers", self._on_answers)
+        self.subscribe("api/similar", self._on_similar)
 
         node_ref = self
 
@@ -147,7 +148,7 @@ class APINode(Node):
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            resp = urlopen(req, timeout=5)
+            resp = urlopen(req, timeout=3)
             log.info(
                 f"[api] submitted answer for question {question_id}: {resp.status}"
             )
@@ -168,6 +169,23 @@ class APINode(Node):
             self.publish("api/answers/response", answers)
         except (URLError, json.JSONDecodeError, OSError) as e:
             log.error(f"[api] failed to fetch answers: {e}")
+
+    def _on_similar(self, msg: Message):
+        base = self._resolve_backend()
+        if not base:
+            return
+        question_id = msg.data["question_id"]
+        uuid = msg.data["uuid"]
+        url = f"{base}/questions/{question_id}/answers/{uuid}/similar"
+        try:
+            resp = urlopen(url, timeout=6)
+            data = json.loads(resp.read())
+            answer = data.get("answer", {}) if isinstance(data, dict) else {}
+            text = answer.get("text", "") if isinstance(answer, dict) else ""
+            log.info(f"[api] similar answer for question {question_id}: {text!r}")
+            self.publish("api/similar/response", text)
+        except (URLError, json.JSONDecodeError, OSError) as e:
+            log.error(f"[api] failed to fetch similar answer: {e}")
 
     def _on_state_changed(self, msg: Message):
         self._state = msg.data["to"].name
