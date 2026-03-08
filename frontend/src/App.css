@@ -1,0 +1,9 @@
+@keyframes fade-highlight {
+  from { background-color: #bbf7d0; }
+  to   { background-color: transparent; }
+}
+
+.answer-highlight {
+  animation: fade-highlight 5s ease-out forwards;
+  border-radius: 3px;
+}

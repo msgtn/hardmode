@@ -37,6 +37,7 @@ def get_answers(question_id):
 def add_answer(question_id):
     body = request.get_json()
     answer = db.add_answer(question_id, body["answer"], body["uuid"])
+    socketio.emit("new_answer", answer)
     return jsonify(answer), 201
 
 
