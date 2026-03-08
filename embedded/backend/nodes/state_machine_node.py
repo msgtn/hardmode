@@ -133,13 +133,6 @@ class StateMachineNode(Node):
                         "uuid": self._session_id,
                     },
                 )
-                # self.publish(
-                #     "api/similar",
-                #     {
-                #         "question_id": self._random_question.id,
-                #         "uuid": self._session_id,
-                #     },
-                # )
 
         if next_state == State.SPEAKING_ANSWER:
             if not self._first_answer_spoken:
@@ -161,7 +154,6 @@ class StateMachineNode(Node):
                     text = "A similar answer: " + self._similar_answer
                 else:
                     text = "Someone else's answer: " + random.choice(self._answers)
-                    # text = "There are no similar answers yet."
             else:
                 if self._answers:
                     text = "Someone else's answer: " + random.choice(self._answers)

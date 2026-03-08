@@ -30,7 +30,7 @@ uint8_t neoR = 0, neoG = 0, neoB = 0;
 uint8_t neoBrightness = 32;  // global brightness scale (0–255)
 
 // Audio output via PWM
-constexpr int AUDIO_OUT_PIN = 3;   // GPIO2 (D1/A1) — connect speaker/amplifier here
+constexpr int AUDIO_OUT_PIN = 3;   // GPIO3 (D1/A1) — connect speaker/amplifier here
 constexpr int PWM_FREQ      = 40000;  // 40kHz carrier, well above audible range
 constexpr int PWM_RESOLUTION = 8;     // 8-bit duty cycle (0–255)
 
@@ -49,7 +49,7 @@ bool baseLastReading = LOW;
 bool baseButtonState = LOW;
 unsigned long baseDebounceTime = 0;
 
-constexpr int BUTTON_LID_PIN = 2;          // GPIO3
+constexpr int BUTTON_LID_PIN = 4;          // GPIO4
 constexpr uint8_t BUTTON_OPEN_LID_ID = 0x02; // must match backend BUTTON_OPEN_LID
 bool lidLastReading = LOW;
 bool lidButtonState = LOW;
