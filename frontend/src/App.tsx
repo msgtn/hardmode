@@ -36,7 +36,7 @@ function App() {
           const aRes = await fetch(`/api/questions/${q.id}/answers`);
           const data: Answer[] = await aRes.json();
           answerMap[q.id] = data.reverse();
-        })
+        }),
       );
       setAnswers(answerMap);
     };
@@ -49,16 +49,27 @@ function App() {
         [answer.question_id]: [answer, ...(prev[answer.question_id] ?? [])],
       }));
       setHighlightedUuid(answer.uuid);
-      setTimeout(() => latestAnswerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+      setTimeout(
+        () =>
+          latestAnswerRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          }),
+        50,
+      );
       setTimeout(() => setHighlightedUuid(null), 5000);
     });
 
-    return () => { socket.off("new_answer"); };
+    return () => {
+      socket.off("new_answer");
+    };
   }, []);
 
   return (
-    <div style={{ padding: 24, fontFamily: "monospace", maxWidth: 700 }}>
-      <h1>Questions & Answers</h1>
+    <div style={{ padding: 24, fontFamily: "monospace", maxWidth: 700, margin: "0 auto" }}>
+      <h1 style={{ color: "red" }}>
+        <em>Close to the Fire</em>
+      </h1>
       {questions.length === 0 && <p>Loading...</p>}
       {questions.map((q) => (
         <div key={q.id} style={{ marginBottom: 32 }}>
@@ -71,7 +82,9 @@ function App() {
                 <li
                   key={a.uuid}
                   ref={i === 0 ? latestAnswerRef : null}
-                  className={a.uuid === highlightedUuid ? "answer-highlight" : undefined}
+                  className={
+                    a.uuid === highlightedUuid ? "answer-highlight" : undefined
+                  }
                   style={{ marginBottom: 4 }}
                 >
                   {a.text}
