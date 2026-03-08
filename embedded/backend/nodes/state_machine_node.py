@@ -40,6 +40,7 @@ TRANSITIONS: dict[tuple[State, Event], State] = {
     # (State.LISTENING, Event.BUTTON_BASE_UP): State.SP,
     # base button up while processing: speak the transcription
     # (State.PROCESSING, Event.BUTTON_BASE_UP): State.SPEAKING,
+    (State.LISTENING, Event.TRANSCRIPTION_READY): State.SPEAKING_ACK,
     (State.PROCESSING, Event.TRANSCRIPTION_READY): State.SPEAKING_ACK,
     # open lid: go straight to speaking a prompt
     (State.IDLE, Event.BUTTON_OPEN_LID): State.SPEAKING,
@@ -146,10 +147,12 @@ class StateMachineNode(Node):
                             "uuid": self._session_id,
                         },
                     )
-                time.sleep(2)
+                for _ in range(12):
+                    if self._similar_answer:
+                        break
+                    time.sleep(0.2)
 
                 self._first_answer_spoken = True
-                print(f"{self._similar_answer=}")
                 if self._similar_answer:
                     text = "A similar answer: " + self._similar_answer
                 else:
