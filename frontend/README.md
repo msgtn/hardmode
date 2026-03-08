@@ -71,3 +71,12 @@ export default defineConfig([
   },
 ])
 ```
+
+------------------\
+To run:
+
+# terminal 1
+cd backend && uv run python app.py
+
+# terminal 2
+cd frontend && npm run dev
