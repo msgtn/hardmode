@@ -2,6 +2,8 @@
 
 > *Strangers need strange moments together* --[Daily tous les jours](https://www.dailytouslesjours.com/en/publications/strangers-need-strange-moments-together)
 
+[![Closer to the Fire demo video](https://img.youtube.com/vi/Uo5YSZazUG0/maxresdefault.jpg)](https://www.youtube.com/watch?v=Uo5YSZazUG0)
+
 **Closer to the Fire** is a handheld device disguised as a flip-top lighter. Here's the experience:
 
 1. Open the lid — The device speaks a reflective question aloud (e.g., "Are you missing anyone right now? Do you think they're missing you too?")
