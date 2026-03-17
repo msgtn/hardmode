@@ -21,4 +21,5 @@ The lighter also functions as an actual lighter—it's a real object that belong
 As the device travels through a community, it accumulates intimate reflections, building an anonymous tapestry of shared human experience.
 
 We made this project in ~30 hours for the [MIT Hard Mode Hardware x AI Hackathon](https://hardmode.media.mit.edu/).
+We won a sponsored prize from [Seeed Studio](https://www.seeedstudio.com/) for use of their [XIAO ESP32 Sense](https://www.seeedstudio.com/XIAO-ESP32S3-Sense-p-5639.html).
 More information is available at the [Devpost page](https://devpost.com/software/closer-to-the-fire#updates).
